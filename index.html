@@ -3,49 +3,151 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Iris · 원쿠션 연습실</title>
+<title>Iris · 쿠션 챌린지</title>
 <style>
-  :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111916; color: #f4f1e4; }
-  main { max-width: 800px; margin: auto; padding: 36px 20px; }
-  h1 { font-size: clamp(2rem, 6vw, 3.6rem); margin: 0; }
-  p { color: #cad5ca; line-height: 1.6; }
-  canvas { display: block; width: 100%; border: 6px solid #98764f; box-sizing: border-box; border-radius: 12px; background: #14533e; cursor: crosshair; }
-  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 20px; }
-  label { display: grid; gap: 4px; flex: 1 1 135px; }
-  input { width: 100%; margin: 0; accent-color: #f0c985; }
-  button { font: inherit; font-weight: 700; padding: 10px 17px; border: 1px solid #f0c985; background: #f0c985; color: #161912; border-radius: 8px; cursor: pointer; }
-  button:last-child { background: transparent; color: #f0c985; }
-  button:disabled { opacity: .5; cursor: default; }
-  #status { min-height: 2em; }
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101816; color: #f3eedf; }
+  * { box-sizing: border-box; }
+  main { width: min(1080px, 100% - 32px); margin: 32px auto; }
+  header { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: clamp(1.8rem, 5vw, 3rem); margin: 0; letter-spacing: -.055em; }
+  h2 { margin: 0 0 12px; font-size: 1.1rem; }
+  p { margin: 6px 0; color: #c4d3c8; line-height: 1.5; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; }
+  .panel { background: #192621; border: 1px solid #35483f; border-radius: 16px; padding: 16px; }
+  canvas { display: block; width: 100%; border: 7px solid #9e7046; border-radius: 13px; background: #155641; cursor: crosshair; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  label { display: grid; gap: 6px; }
+  input { width: 100%; margin: 0; accent-color: #f4c57f; }
+  button { font: inherit; color: inherit; background: #263a31; border: 1px solid #486154; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: #f4c57f; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #f4c57f; outline-offset: 3px; }
+  button:disabled { opacity: .45; cursor: default; }
+  #shoot { background: #f4c57f; color: #241b11; border-color: #f4c57f; font-weight: 750; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  #levels { display: grid; gap: 8px; }
+  #levels button { text-align: left; }
+  #levels button[aria-current="true"] { border-color: #f4c57f; color: #f4c57f; }
+  #progress { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #status { min-height: 3em; margin-top: 10px; }
+  @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } #levels { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 </head>
 <body>
 <main>
-  <h1>원쿠션 연습실</h1>
-  <p>테이블을 눌러 조준하거나 방향 슬라이더를 움직이세요. 흰 공을 쿠션에 한 번 이상 맞힌 뒤 금색 표적에 닿게 하면 성공입니다.</p>
-  <canvas id="table" width="720" height="360" aria-label="당구 연습 테이블"></canvas>
-  <div class="controls">
-    <label for="angle">방향 <input id="angle" type="range" min="-180" max="180" value="-15"></label>
-    <label for="power">세기 <input id="power" type="range" min="1" max="100" value="85"></label>
-    <button id="shoot" type="button">샷</button>
-    <button id="reset" type="button">다시 놓기</button>
+  <header><div><h1>Iris 쿠션 챌린지</h1><p id="objective"></p></div><p id="progress"></p></header>
+  <div class="layout">
+    <section class="panel" aria-label="연습 테이블">
+      <canvas id="table" width="720" height="360" aria-label="흰 공과 금색 표적이 있는 당구 테이블"></canvas>
+      <div class="controls">
+        <label for="angle"><span>방향 <output id="angle-value"></output></span><input id="angle" type="range" min="-180" max="179" value="-15"></label>
+        <label for="power"><span>세기 <output id="power-value"></output></span><input id="power" type="range" min="1" max="100" value="85"></label>
+      </div>
+      <div class="actions">
+        <button id="shoot" type="button">샷</button>
+        <button id="hint" type="button">성공 경로 찾기</button>
+        <button id="replay" type="button" disabled>슬로모션 다시 보기</button>
+        <button id="reset" type="button">공 다시 놓기</button>
+      </div>
+      <p id="status" role="status"></p>
+    </section>
+    <nav class="panel" aria-label="배치 선택"><h2>배치</h2><div id="levels"></div></nav>
   </div>
-  <p id="status" role="status"></p>
 </main>
 <script>
   const table = document.querySelector('#table')
   const context = table.getContext('2d')
   const angle = document.querySelector('#angle')
   const power = document.querySelector('#power')
-  const shoot = document.querySelector('#shoot')
-  const reset = document.querySelector('#reset')
   const status = document.querySelector('#status')
+  const shoot = document.querySelector('#shoot')
+  const hintButton = document.querySelector('#hint')
+  const replay = document.querySelector('#replay')
+  const levelList = document.querySelector('#levels')
+  const levels = [
+  {
+    "name": "첫 반사",
+    "start": {
+      "x": 150,
+      "y": 190
+    },
+    "target": {
+      "x": 562,
+      "y": 142,
+      "radius": 20
+    },
+    "minimum": 1
+  },
+  {
+    "name": "짧은 쿠션",
+    "start": {
+      "x": 580,
+      "y": 232
+    },
+    "target": {
+      "x": 401,
+      "y": 95,
+      "radius": 20
+    },
+    "minimum": 1
+  },
+  {
+    "name": "테이블 횡단",
+    "start": {
+      "x": 102,
+      "y": 100
+    },
+    "target": {
+      "x": 530,
+      "y": 240,
+      "radius": 20
+    },
+    "minimum": 2
+  },
+  {
+    "name": "코너 탈출",
+    "start": {
+      "x": 610,
+      "y": 285
+    },
+    "target": {
+      "x": 185,
+      "y": 92,
+      "radius": 20
+    },
+    "minimum": 2
+  },
+  {
+    "name": "세 쿠션의 시작",
+    "start": {
+      "x": 155,
+      "y": 260
+    },
+    "target": {
+      "x": 430,
+      "y": 110,
+      "radius": 20
+    },
+    "minimum": 3
+  },
+  {
+    "name": "마지막 배치",
+    "start": {
+      "x": 560,
+      "y": 130
+    },
+    "target": {
+      "x": 240,
+      "y": 295,
+      "radius": 20
+    },
+    "minimum": 3
+  }
+]
   const radius = 10
-  const target = { x: 562, y: 142, radius: 23 }
   const limits = { x: table.width - radius, y: table.height - radius }
   const stepSeconds = 1 / 120
 
-  function advance(ball) {
+  function advance(ball, target, minimum) {
     for (const axis of ['x', 'y']) {
       ball.position[axis] += ball.velocity[axis] * stepSeconds
       const boundary = Math.min(limits[axis], Math.max(radius, ball.position[axis]))
@@ -59,19 +161,57 @@
 
     const distance = Math.hypot(ball.position.x - target.x, ball.position.y - target.y)
     if (distance <= radius + target.radius) {
-      return ball.cushions > 0 ? 'success' : 'direct'
+      return ball.cushions >= minimum ? 'success' : 'direct'
     }
     if (Math.hypot(ball.velocity.x, ball.velocity.y) < 13) return 'stopped'
     return 'moving'
   }
 
-  let ball
-  let frame = null
-  let moving = false
 
-  function direction() {
-    return Number(angle.value) * Math.PI / 180
+  function trace(level, degrees, strength) {
+    const radians = degrees * Math.PI / 180
+    const speed = 60 + strength * 6
+    const ball = {
+      position: { ...level.start },
+      velocity: { x: Math.cos(radians) * speed, y: Math.sin(radians) * speed },
+      cushions: 0
+    }
+    const points = [{ ...ball.position, cushions: 0 }]
+    let outcome
+    do {
+      outcome = advance(ball, level.target, level.minimum)
+      points.push({ ...ball.position, cushions: ball.cushions })
+    } while (outcome === 'moving')
+    return { points, outcome, cushions: ball.cushions }
   }
+
+  function solve(level) {
+    for (const strength of [85, 100, 70, 55, 40, 25, 10]) {
+      for (let offset = 0; offset < 360; offset++) {
+        const degrees = (offset + 180) % 360 - 180
+        const shot = trace(level, degrees, strength)
+        if (shot.outcome === 'success' && shot.cushions === level.minimum) {
+          return { ...shot, degrees, strength }
+        }
+      }
+    }
+    return null
+  }
+
+  const storageKey = 'iris-cushion-records-v1'
+  let records = {}
+  try {
+    records = JSON.parse(localStorage.getItem(storageKey)) || {}
+  } catch {
+    // Play still works when browser storage is unavailable.
+  }
+
+  let levelIndex = 0
+  let attempts = 0
+  let frame = null
+  let lastShot = null
+  let suggestion = null
+  let paintedPoint = null
 
   function circle(x, y, size, color) {
     context.beginPath()
@@ -80,76 +220,179 @@
     context.fill()
   }
 
-  function draw() {
-    context.clearRect(0, 0, table.width, table.height)
-    const { x, y } = ball.position
-    circle(target.x, target.y, target.radius, '#f0c985')
-    circle(target.x, target.y, target.radius - 4, '#14533e')
-    if (!moving) {
-      context.beginPath()
-      context.setLineDash([6, 6])
-      context.moveTo(x, y)
-      context.lineTo(x + Math.cos(direction()) * 105, y + Math.sin(direction()) * 105)
-      context.strokeStyle = '#d8e5dc'
-      context.stroke()
-      context.setLineDash([])
-    }
-    circle(x, y, radius, '#fff9df')
+  function updateControls() {
+    const moving = frame !== null
+    shoot.disabled = moving
+    hintButton.disabled = moving
+    replay.disabled = moving || !lastShot
+    angle.disabled = moving
+    power.disabled = moving
+    document.querySelector('#angle-value').textContent = angle.value + '°'
+    document.querySelector('#power-value').textContent = power.value + '%'
   }
 
-  function placeBall(message = '조준한 뒤 샷을 눌러 시작하세요.') {
-    cancelAnimationFrame(frame)
+  function draw() {
+    const level = levels[levelIndex]
+    const point = paintedPoint || level.start
+    context.clearRect(0, 0, table.width, table.height)
+    for (let x = 90; x < table.width; x += 90) {
+      circle(x, 10, 2, '#a8cabb')
+      circle(x, table.height - 10, 2, '#a8cabb')
+    }
+    circle(level.target.x, level.target.y, level.target.radius, '#f4c57f')
+    circle(level.target.x, level.target.y, level.target.radius - 4, '#155641')
+    if (suggestion && frame === null) {
+      context.beginPath()
+      context.moveTo(level.start.x, level.start.y)
+      for (const sample of suggestion.points) context.lineTo(sample.x, sample.y)
+      context.strokeStyle = '#f4c57f'
+      context.setLineDash([5, 5])
+      context.stroke()
+      context.setLineDash([])
+      for (let i = 1; i < suggestion.points.length; i++) {
+        const sample = suggestion.points[i]
+        if (sample.cushions !== suggestion.points[i - 1].cushions) {
+          circle(sample.x, sample.y, 5, '#f4c57f')
+        }
+      }
+    }
+    if (!paintedPoint) {
+      const radians = Number(angle.value) * Math.PI / 180
+      context.beginPath()
+      context.moveTo(point.x, point.y)
+      context.lineTo(point.x + Math.cos(radians) * 85, point.y + Math.sin(radians) * 85)
+      context.strokeStyle = '#e7eee6'
+      context.stroke()
+    }
+    circle(point.x, point.y, radius, '#fff8dc')
+    updateControls()
+  }
+
+  function updateLevels() {
+    document.querySelector('#progress').textContent =
+      levels.filter((_, index) => records[index] > 0).length + ' / ' + levels.length + ' 완료'
+    const level = levels[levelIndex]
+    document.querySelector('#objective').textContent =
+      level.name + ' · 쿠션 ' + level.minimum + '회 이상 맞힌 뒤 표적에 닿기'
+    for (const [index, button] of Array.from(levelList.children).entries()) {
+      const record = records[index]
+      button.textContent = levels[index].name + (record > 0 ? ' · 최소 ' + record + '샷' : '')
+      button.setAttribute('aria-current', String(index === levelIndex))
+    }
+  }
+
+  function placeBall(message) {
+    if (frame !== null) cancelAnimationFrame(frame)
     frame = null
-    moving = false
-    ball = { position: { x: 150, y: 190 }, velocity: { x: 0, y: 0 }, cushions: 0 }
-    shoot.disabled = false
+    suggestion = null
+    paintedPoint = null
     status.textContent = message
     draw()
   }
 
-  table.addEventListener('click', (event) => {
-    if (moving) return
+  function selectLevel(index) {
+    levelIndex = index
+    attempts = 0
+    lastShot = null
+    angle.value = -15
+    power.value = 85
+    placeBall('테이블을 눌러 조준하거나 방향 슬라이더를 움직이세요.')
+    updateLevels()
+  }
+
+  function animate(shot, isReplay = false) {
+    let startedAt
+    const secondsPerSample = isReplay ? stepSeconds * 2.5 : stepSeconds
+    paintedPoint = shot.points[0]
+    let shownCushions = -1
+
+    function render(now) {
+      startedAt ??= now
+      const index = Math.min(shot.points.length - 1, Math.floor((now - startedAt) / (1000 * secondsPerSample)))
+      paintedPoint = shot.points[index]
+      if (paintedPoint.cushions !== shownCushions) {
+        shownCushions = paintedPoint.cushions
+        status.textContent = (isReplay ? '슬로모션 · ' : '') + '쿠션 ' + shownCushions + '회'
+      }
+
+      if (index === shot.points.length - 1) {
+        frame = null
+        const outcome = {
+          success: '성공! 쿠션 ' + shot.cushions + '회 후 표적에 닿았습니다.',
+          direct: '표적에 닿았지만 쿠션이 ' + shot.cushions + '회로 부족합니다.',
+          stopped: '공이 표적에 닿기 전에 멈췄습니다.'
+        }
+        if (!isReplay && shot.outcome === 'success') {
+          records[levelIndex] = Math.min(records[levelIndex] || attempts, attempts)
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(records))
+          } catch {
+            // The current session keeps its record in memory.
+          }
+          attempts = 0
+          updateLevels()
+        }
+        paintedPoint = null
+        status.textContent = outcome[shot.outcome]
+        draw()
+        return
+      }
+
+      draw()
+      frame = requestAnimationFrame(render)
+    }
+
+    frame = requestAnimationFrame(render)
+    draw()
+  }
+
+  table.addEventListener('click', event => {
+    if (frame !== null) return
     const bounds = table.getBoundingClientRect()
     const x = (event.clientX - bounds.left - table.clientLeft) * table.width / table.clientWidth
     const y = (event.clientY - bounds.top - table.clientTop) * table.height / table.clientHeight
-    angle.value = Math.round(Math.atan2(y - ball.position.y, x - ball.position.x) * 180 / Math.PI)
+    const start = levels[levelIndex].start
+    const degrees = Math.round(Math.atan2(y - start.y, x - start.x) * 180 / Math.PI)
+    angle.value = degrees === 180 ? -180 : degrees
+    suggestion = null
     draw()
   })
-  angle.addEventListener('input', draw)
-  reset.addEventListener('click', () => placeBall())
+
+  for (const input of [angle, power]) {
+    input.addEventListener('input', () => {
+      suggestion = null
+      draw()
+    })
+  }
 
   shoot.addEventListener('click', () => {
-    const speed = 60 + Number(power.value) * 6
-    ball.velocity = { x: Math.cos(direction()) * speed, y: Math.sin(direction()) * speed }
-    moving = true
-    shoot.disabled = true
-    status.textContent = '공이 움직이는 중…'
-    let previous = performance.now()
-    let remaining = 0
-
-    function animate(now) {
-      remaining += Math.min(0.05, (now - previous) / 1000)
-      previous = now
-      while (remaining >= stepSeconds) {
-        remaining -= stepSeconds
-        const outcome = advance(ball)
-        if (outcome === 'moving') continue
-        const result = {
-          success: '성공! 쿠션 ' + ball.cushions + '회 후 표적에 닿았습니다.',
-          direct: '표적에 바로 닿았습니다. 쿠션을 먼저 맞혀 보세요.',
-          stopped: '공이 멈췄습니다. 각도나 세기를 바꿔 보세요.'
-        }
-        placeBall(result[outcome])
-        return
-      }
-      draw()
-      frame = requestAnimationFrame(animate)
-    }
-
-    frame = requestAnimationFrame(animate)
+    attempts++
+    lastShot = trace(levels[levelIndex], Number(angle.value), Number(power.value))
+    suggestion = null
+    animate(lastShot)
   })
 
-  placeBall()
+  hintButton.addEventListener('click', () => {
+    suggestion = solve(levels[levelIndex])
+    if (!suggestion) {
+      status.textContent = '현재 탐색 범위에서 성공 경로를 찾지 못했습니다.'
+      return
+    }
+    angle.value = suggestion.degrees
+    power.value = suggestion.strength
+    status.textContent = '점선은 예상 경로입니다. 샷을 누르면 그대로 칩니다.'
+    draw()
+  })
+
+  replay.addEventListener('click', () => animate(lastShot, true))
+  document.querySelector('#reset').addEventListener('click', () => placeBall('공을 처음 위치로 돌렸습니다.'))
+  levels.forEach((level, index) => {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.addEventListener('click', () => selectLevel(index))
+    levelList.append(button)
+  })
+  selectLevel(0)
 </script>
 </body>
 </html>
