@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iris · 원쿠션 연습실</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111916; color: #f4f1e4; }
+  main { max-width: 800px; margin: auto; padding: 36px 20px; }
+  h1 { font-size: clamp(2rem, 6vw, 3.6rem); margin: 0; }
+  p { color: #cad5ca; line-height: 1.6; }
+  canvas { display: block; width: 100%; border: 6px solid #98764f; box-sizing: border-box; border-radius: 12px; background: #14533e; cursor: crosshair; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 20px; }
+  label { display: grid; gap: 4px; flex: 1 1 135px; }
+  input { width: 100%; margin: 0; accent-color: #f0c985; }
+  button { font: inherit; font-weight: 700; padding: 10px 17px; border: 1px solid #f0c985; background: #f0c985; color: #161912; border-radius: 8px; cursor: pointer; }
+  button:last-child { background: transparent; color: #f0c985; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { min-height: 2em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>원쿠션 연습실</h1>
+  <p>테이블을 눌러 조준하거나 방향 슬라이더를 움직이세요. 흰 공을 쿠션에 한 번 이상 맞힌 뒤 금색 표적에 닿게 하면 성공입니다.</p>
+  <canvas id="table" width="720" height="360" aria-label="당구 연습 테이블"></canvas>
+  <div class="controls">
+    <label for="angle">방향 <input id="angle" type="range" min="-180" max="180" value="-15"></label>
+    <label for="power">세기 <input id="power" type="range" min="1" max="100" value="85"></label>
+    <button id="shoot" type="button">샷</button>
+    <button id="reset" type="button">다시 놓기</button>
+  </div>
+  <p id="status" role="status"></p>
+</main>
+<script>
+  const table = document.querySelector('#table')
+  const context = table.getContext('2d')
+  const angle = document.querySelector('#angle')
+  const power = document.querySelector('#power')
+  const shoot = document.querySelector('#shoot')
+  const reset = document.querySelector('#reset')
+  const status = document.querySelector('#status')
+  const radius = 10
+  const target = { x: 562, y: 142, radius: 23 }
+  const limits = { x: table.width - radius, y: table.height - radius }
+  const stepSeconds = 1 / 120
+
+  function advance(ball) {
+    for (const axis of ['x', 'y']) {
+      ball.position[axis] += ball.velocity[axis] * stepSeconds
+      const boundary = Math.min(limits[axis], Math.max(radius, ball.position[axis]))
+      if (boundary !== ball.position[axis]) {
+        ball.position[axis] = 2 * boundary - ball.position[axis]
+        ball.velocity[axis] *= -0.88
+        ball.cushions++
+      }
+      ball.velocity[axis] *= 0.997
+    }
+
+    const distance = Math.hypot(ball.position.x - target.x, ball.position.y - target.y)
+    if (distance <= radius + target.radius) {
+      return ball.cushions > 0 ? 'success' : 'direct'
+    }
+    if (Math.hypot(ball.velocity.x, ball.velocity.y) < 13) return 'stopped'
+    return 'moving'
+  }
+
+  let ball
+  let frame = null
+  let moving = false
+
+  function direction() {
+    return Number(angle.value) * Math.PI / 180
+  }
+
+  function circle(x, y, size, color) {
+    context.beginPath()
+    context.arc(x, y, size, 0, Math.PI * 2)
+    context.fillStyle = color
+    context.fill()
+  }
+
+  function draw() {
+    context.clearRect(0, 0, table.width, table.height)
+    const { x, y } = ball.position
+    circle(target.x, target.y, target.radius, '#f0c985')
+    circle(target.x, target.y, target.radius - 4, '#14533e')
+    if (!moving) {
+      context.beginPath()
+      context.setLineDash([6, 6])
+      context.moveTo(x, y)
+      context.lineTo(x + Math.cos(direction()) * 105, y + Math.sin(direction()) * 105)
+      context.strokeStyle = '#d8e5dc'
+      context.stroke()
+      context.setLineDash([])
+    }
+    circle(x, y, radius, '#fff9df')
+  }
+
+  function placeBall(message = '조준한 뒤 샷을 눌러 시작하세요.') {
+    cancelAnimationFrame(frame)
+    frame = null
+    moving = false
+    ball = { position: { x: 150, y: 190 }, velocity: { x: 0, y: 0 }, cushions: 0 }
+    shoot.disabled = false
+    status.textContent = message
+    draw()
+  }
+
+  table.addEventListener('click', (event) => {
+    if (moving) return
+    const bounds = table.getBoundingClientRect()
+    const x = (event.clientX - bounds.left - table.clientLeft) * table.width / table.clientWidth
+    const y = (event.clientY - bounds.top - table.clientTop) * table.height / table.clientHeight
+    angle.value = Math.round(Math.atan2(y - ball.position.y, x - ball.position.x) * 180 / Math.PI)
+    draw()
+  })
+  angle.addEventListener('input', draw)
+  reset.addEventListener('click', () => placeBall())
+
+  shoot.addEventListener('click', () => {
+    const speed = 60 + Number(power.value) * 6
+    ball.velocity = { x: Math.cos(direction()) * speed, y: Math.sin(direction()) * speed }
+    moving = true
+    shoot.disabled = true
+    status.textContent = '공이 움직이는 중…'
+    let previous = performance.now()
+    let remaining = 0
+
+    function animate(now) {
+      remaining += Math.min(0.05, (now - previous) / 1000)
+      previous = now
+      while (remaining >= stepSeconds) {
+        remaining -= stepSeconds
+        const outcome = advance(ball)
+        if (outcome === 'moving') continue
+        const result = {
+          success: '성공! 쿠션 ' + ball.cushions + '회 후 표적에 닿았습니다.',
+          direct: '표적에 바로 닿았습니다. 쿠션을 먼저 맞혀 보세요.',
+          stopped: '공이 멈췄습니다. 각도나 세기를 바꿔 보세요.'
+        }
+        placeBall(result[outcome])
+        return
+      }
+      draw()
+      frame = requestAnimationFrame(animate)
+    }
+
+    frame = requestAnimationFrame(animate)
+  })
+
+  placeBall()
+</script>
+</body>
+</html>
